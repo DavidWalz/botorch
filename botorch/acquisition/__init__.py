@@ -34,6 +34,7 @@ from .objective import (
     LinearMCObjective,
     MCAcquisitionObjective,
     ScalarizedObjective,
+    WeightedNormMCObjective,
 )
 from .utils import get_acquisition_function
 
@@ -64,6 +65,7 @@ __all__ = [
     "GenericMCObjective",
     "IdentityMCObjective",
     "LinearMCObjective",
+    "WeightedNormMCObjective",
     "MCAcquisitionFunction",
     "MCAcquisitionObjective",
     "ScalarizedObjective",

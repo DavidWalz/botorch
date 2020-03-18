@@ -12,6 +12,7 @@ from botorch.acquisition.objective import (
     GenericMCObjective,
     IdentityMCObjective,
     LinearMCObjective,
+    WeightedNormMCObjective,
     MCAcquisitionObjective,
     ScalarizedObjective,
 )
@@ -199,4 +200,52 @@ class TestLinearMCObjective(BotorchTestCase):
             with self.assertRaises(ValueError):
                 LinearMCObjective(
                     weights=torch.tensor(1.0, device=self.device, dtype=dtype)
+                )
+
+
+class TestWeightedNormMCObjective(BotorchTestCase):
+    def test_weighted_norm_mc_objective(self):
+        for dtype in (torch.float, torch.double):
+            weights = torch.rand(3, device=self.device, dtype=dtype)
+            utopian = torch.rand(3, device=self.device, dtype=dtype)
+            samples = torch.randn(4, 2, 3, device=self.device, dtype=dtype)
+
+            # check various norms
+            for norm in (1, 2, 3, float("inf"), float("-inf"), "fro"):
+                obj = WeightedNormMCObjective(
+                    weights=weights, utopian=utopian, norm=norm
+                )
+                self.assertTrue(
+                    torch.allclose(
+                        obj(samples),
+                        torch.norm((samples - utopian) * weights, p=norm, dim=-1),
+                    )
+                )
+                samples = torch.randn(5, 4, 2, 3, device=self.device, dtype=dtype)
+                self.assertTrue(
+                    torch.allclose(
+                        obj(samples),
+                        torch.norm((samples - utopian) * weights, p=norm, dim=-1),
+                    )
+                )
+
+            # can't compute if sample output dimensions are incompatible
+            obj = WeightedNormMCObjective(weights=weights, utopian=utopian)
+            with self.assertRaises(RuntimeError):
+                obj(samples=torch.randn(2, device=self.device, dtype=dtype))
+            with self.assertRaises(RuntimeError):
+                obj(samples=torch.randn(1, device=self.device, dtype=dtype))
+
+            # can't construct objectives with mismatching weights / utopian
+            with self.assertRaises(ValueError):
+                WeightedNormMCObjective(
+                    weights=torch.rand(3, device=self.device, dtype=dtype),
+                    utopian=torch.rand(4, device=self.device, dtype=dtype),
+                )
+
+            # can't construct when weights and utopian are not both 1-dimensional
+            with self.assertRaises(ValueError):
+                WeightedNormMCObjective(
+                    weights=torch.rand(2, 3, device=self.device, dtype=dtype),
+                    utopian=torch.rand(3, device=self.device, dtype=dtype),
                 )

@@ -11,7 +11,7 @@ Objective Modules to be used with acquisition functions.
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
-from typing import Callable, List
+from typing import Callable, List, Union
 
 import torch
 from botorch.utils import apply_constraints
@@ -149,6 +149,60 @@ class LinearMCObjective(MCAcquisitionObjective):
         if samples.shape[-1] != self.weights.shape[-1]:
             raise RuntimeError("Output shape of samples not equal to that of weights")
         return torch.einsum("...m, m", [samples, self.weights])
+
+
+class WeightedNormMCObjective(MCAcquisitionObjective):
+    r"""Weighted norm objective for scalarizing multiple outputs.
+
+    Example:
+        Example for a model with two outcomes:
+
+        >>> weights = torch.tensor([0.75, 0.25])
+        >>> utopian = torch.tensor([0., 0.])
+        >>> objective = WeightedNormMCObjective(weights, utopian, norm=2)
+        >>> samples = sampler(posterior)
+        >>> objective_values = objective(samples)
+    """
+
+    def __init__(
+        self,
+        weights: Tensor,
+        utopian: Tensor,
+        norm: Union[int, float, str] = float("inf"),
+    ) -> None:
+        r"""Weighted norm objective.
+
+        Args:
+            weights: A one-dimensional tensor with `m` elements representing the
+                weights on the outputs.
+            ideal: A one-dimension tensor with `m` elements representing the utopian
+                output.
+            norm (int, float, inf, -inf, 'fro', 'nuc', optional): Order of the norm.
+                Defaults to inf (Chebyshef norm).
+        """
+        super().__init__()
+        if weights.shape != utopian.shape:
+            raise ValueError("weights and utopian must have the same shape")
+        if weights.dim() != 1:
+            raise ValueError("weights must be a one-dimensional tensor.")
+        self.register_buffer("weights", weights)
+        self.register_buffer("utopian", utopian)
+        self.norm = norm
+
+    def forward(self, samples: Tensor) -> Tensor:
+        r"""Evaluate the linear objective on the samples.
+
+        Args:
+            samples: A `sample_shape x batch_shape x q x m`-dim tensors of
+                samples from a model posterior.
+
+        Returns:
+            A `sample_shape x batch_shape x q`-dim tensor of objective values.
+        """
+        if samples.shape[-1] != self.utopian.shape[-1]:
+            raise RuntimeError("Output shape of samples not equal to that of utopian")
+        d = (samples - self.utopian) * self.weights
+        return torch.norm(d, p=self.norm, dim=-1)
 
 
 class GenericMCObjective(MCAcquisitionObjective):
